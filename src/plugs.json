@@ -1,0 +1,55 @@
+{
+  "core": {
+    "backend": {
+      "repo": "https://github.com/ohcnetwork/care.git",
+      "branch": "develop",
+      "dir": "care"
+    },
+    "frontend": {
+      "repo": "https://github.com/ohcnetwork/care_fe.git",
+      "branch": "develop",
+      "dir": "care_fe"
+    }
+  },
+  "backend": [
+    {
+      "name": "abdm",
+      "description": "ABDM / ABHA health data integration",
+      "repo": "https://github.com/10bedicu/care_abdm.git",
+      "branch": "develop",
+      "dir": "care_abdm",
+      "packageName": "/app/care_abdm",
+      "version": "",
+      "env": [
+        { "key": "ABDM_CLIENT_ID", "prompt": true, "secret": true, "description": "ABDM sandbox client id" },
+        { "key": "ABDM_CLIENT_SECRET", "prompt": true, "secret": true, "description": "ABDM sandbox client secret" },
+        { "key": "BACKEND_DOMAIN", "prompt": true, "description": "Publicly reachable backend URL for ABDM callbacks" },
+        { "key": "ABDM_ABHA_URL", "default": "https://abhasbx.abdm.gov.in/abha/api" },
+        { "key": "ABDM_GATEWAY_URL", "default": "https://dev.abdm.gov.in/api/hiecm" },
+        { "key": "ABDM_FACILITY_URL", "default": "https://facilitysbx.abdm.gov.in" },
+        { "key": "ABDM_CM_ID", "default": "sbx" },
+        { "key": "ABDM_SCAN_AND_PAY_PROVIDER", "default": "razorpay" }
+      ]
+    }
+  ],
+  "frontend": [
+    {
+      "name": "care_abdm_fe",
+      "description": "ABDM frontend micro-app",
+      "repo": "https://github.com/10bedicu/care_abdm_fe.git",
+      "branch": "develop",
+      "dir": "care_abdm_fe",
+      "enabledApp": "care_abdm_fe",
+      "devUrl": "localhost:5173",
+      "devCommand": "npm run start",
+      "remoteEntryUrl": "http://localhost:5173/assets/remoteEntry.js",
+      "pluginConfig": {
+        "config": {
+          "scanAndShareUrl": "https://phrsbx.abdm.gov.in/share-profile?hip-id=<HF_ID>&counter-id=<COUNTER_ID>",
+          "enforceAbhaLinking": true
+        }
+      },
+      "env": []
+    }
+  ]
+}
