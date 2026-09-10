@@ -7,7 +7,7 @@ import type { Command } from "commander";
 
 import registryJson from "../plugs.json" with { type: "json" };
 import type { BackendPlug, CreateManifest, FrontendPlug, PluginConfigEntry, Registry, Runtime } from "../types.js";
-import { cloneRepo } from "../lib/git.js";
+import { cloneRepo, pullRepo } from "../lib/git.js";
 import { upsertEnv, copyIfMissing } from "../lib/env.js";
 import { orchestrate } from "../lib/orchestrate.js";
 
@@ -15,12 +15,13 @@ const registry = registryJson as unknown as Registry;
 
 const CANCELLED = Symbol("cancelled");
 
-// Base backend env for the native runtime, where services run on localhost instead of docker hosts.
-const NATIVE_BASE_ENV: Record<string, string> = {
-  DATABASE_URL: "postgres://postgres:postgres@localhost:5432/care",
-  REDIS_URL: "redis://localhost:6379",
-  CELERY_BROKER_URL: "redis://localhost:6379/0",
-};
+const DEFAULT_DATABASE_URL = "postgres://postgres:postgres@localhost:5432/care";
+const DEFAULT_REDIS_URL = "redis://localhost:6379";
+
+function celeryBrokerFrom(redisUrl: string): string {
+  const withoutScheme = redisUrl.replace(/^redis:\/\//, "");
+  return /\/\d+$/.test(withoutScheme) ? redisUrl : `${redisUrl.replace(/\/$/, "")}/0`;
+}
 
 interface CreateOptions {
   branch?: string;
@@ -48,7 +49,6 @@ function message(error: unknown): string {
   return String(error);
 }
 
-// Resolve each plug's env vars (prompting the flagged ones) into a per-plug map.
 async function collectEnvPerPlug(
   plugs: (BackendPlug | FrontendPlug)[],
 ): Promise<Map<string, Record<string, string>> | symbol> {
@@ -91,13 +91,23 @@ async function cloneCore(
   branch: string,
   dest: string,
   label: string,
+  warnings: string[],
 ): Promise<void> {
   spinner.start(`Cloning ${label}`);
-  await cloneRepo(repo, branch, dest);
-  spinner.stop(`Cloned ${label}`);
+  const cloned = await cloneRepo(repo, branch, dest);
+  if (cloned) {
+    spinner.stop(`Cloned ${label}`);
+    return;
+  }
+  try {
+    await pullRepo(dest);
+    spinner.stop(`Updated ${label}`);
+  } catch (error) {
+    spinner.stop(`Reused ${label}`);
+    warnings.push(`Could not update ${label}: ${message(error)}`);
+  }
 }
 
-// Backend plugs load editable from inside the mounted /app volume, so edits live-reload.
 function backendPlugPackage(plug: BackendPlug, runtime: Runtime, backendPath: string): string {
   return runtime === "docker" ? plug.packageName : path.join(backendPath, plug.dir);
 }
@@ -117,8 +127,8 @@ async function createCommand(directory: string | undefined, options: CreateOptio
   const targetPath = path.resolve(process.cwd(), targetInput);
   if (existsSync(targetPath) && (await fs.readdir(targetPath)).length > 0) {
     const proceed = await p.confirm({
-      message: `${targetInput} already exists and is not empty. Continue anyway?`,
-      initialValue: false,
+      message: `${targetInput} already exists. Resume setup here (existing clones are reused)?`,
+      initialValue: true,
     });
     if (p.isCancel(proceed) || !proceed) return cancel();
   }
@@ -132,6 +142,30 @@ async function createCommand(directory: string | undefined, options: CreateOptio
     initialValue: "docker",
   });
   if (p.isCancel(runtime)) return cancel();
+
+  let nativeServices: Record<string, string> = {};
+  if (runtime === "native") {
+    const databaseUrl = await p.text({
+      message: "Database URL",
+      defaultValue: DEFAULT_DATABASE_URL,
+      placeholder: DEFAULT_DATABASE_URL,
+    });
+    if (p.isCancel(databaseUrl)) return cancel();
+
+    const redisUrl = await p.text({
+      message: "Redis URL",
+      defaultValue: DEFAULT_REDIS_URL,
+      placeholder: DEFAULT_REDIS_URL,
+    });
+    if (p.isCancel(redisUrl)) return cancel();
+
+    const resolvedRedis = (redisUrl as string) || DEFAULT_REDIS_URL;
+    nativeServices = {
+      DATABASE_URL: (databaseUrl as string) || DEFAULT_DATABASE_URL,
+      REDIS_URL: resolvedRedis,
+      CELERY_BROKER_URL: celeryBrokerFrom(resolvedRedis),
+    };
+  }
 
   const backendSelection = await p.multiselect({
     message: "Select backend plugs to install",
@@ -169,8 +203,8 @@ async function createCommand(directory: string | undefined, options: CreateOptio
   const spinner = p.spinner();
 
   try {
-    await cloneCore(spinner, core.backend.repo, options.branch ?? core.backend.branch, backendPath, "care backend");
-    await cloneCore(spinner, core.frontend.repo, options.branch ?? core.frontend.branch, frontendPath, "care frontend");
+    await cloneCore(spinner, core.backend.repo, options.branch ?? core.backend.branch, backendPath, "care backend", warnings);
+    await cloneCore(spinner, core.frontend.repo, options.branch ?? core.frontend.branch, frontendPath, "care frontend", warnings);
   } catch (error) {
     spinner.stop("Failed to clone core repositories");
     p.log.error(message(error));
@@ -179,10 +213,18 @@ async function createCommand(directory: string | undefined, options: CreateOptio
 
   const installedBackend: BackendPlug[] = [];
   for (const plug of selectedBackend) {
+    const plugPath = path.join(backendPath, plug.dir);
     try {
       spinner.start(`Cloning backend plug ${plug.name}`);
-      await cloneRepo(plug.repo, plug.branch, path.join(backendPath, plug.dir));
-      spinner.stop(`Cloned backend plug ${plug.name}`);
+      const cloned = await cloneRepo(plug.repo, plug.branch, plugPath);
+      if (!cloned) {
+        try {
+          await pullRepo(plugPath);
+        } catch (error) {
+          warnings.push(`Could not update backend plug ${plug.name}: ${message(error)}`);
+        }
+      }
+      spinner.stop(cloned ? `Cloned backend plug ${plug.name}` : `Updated backend plug ${plug.name}`);
       installedBackend.push(plug);
     } catch (error) {
       spinner.stop(`Skipped backend plug ${plug.name}`);
@@ -192,10 +234,18 @@ async function createCommand(directory: string | undefined, options: CreateOptio
 
   const installedFrontend: FrontendPlug[] = [];
   for (const plug of selectedFrontend) {
+    const plugPath = path.join(targetPath, plug.dir);
     try {
       spinner.start(`Cloning frontend plug ${plug.name}`);
-      await cloneRepo(plug.repo, plug.branch, path.join(targetPath, plug.dir));
-      spinner.stop(`Cloned frontend plug ${plug.name}`);
+      const cloned = await cloneRepo(plug.repo, plug.branch, plugPath);
+      if (!cloned) {
+        try {
+          await pullRepo(plugPath);
+        } catch (error) {
+          warnings.push(`Could not update frontend plug ${plug.name}: ${message(error)}`);
+        }
+      }
+      spinner.stop(cloned ? `Cloned frontend plug ${plug.name}` : `Updated frontend plug ${plug.name}`);
       installedFrontend.push(plug);
     } catch (error) {
       spinner.stop(`Skipped frontend plug ${plug.name}`);
@@ -241,7 +291,7 @@ async function createCommand(directory: string | undefined, options: CreateOptio
     } else {
       const nativeEnvPath = path.join(backendPath, ".env");
       await copyIfMissing(path.join(backendPath, ".env.example"), nativeEnvPath);
-      await upsertEnv(nativeEnvPath, { ...NATIVE_BASE_ENV, ...backendValues });
+      await upsertEnv(nativeEnvPath, { ...nativeServices, ...backendValues });
     }
 
     const frontendEnv: Record<string, string> = {};

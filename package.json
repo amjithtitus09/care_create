@@ -27,6 +27,9 @@
     "cli"
   ],
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "@clack/prompts": "^0.7.0",
     "commander": "^12.1.0",

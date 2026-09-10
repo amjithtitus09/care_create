@@ -3,6 +3,9 @@ import { createRequire } from "node:module";
 
 import { registerCreateCommand } from "./commands/create.js";
 import { registerRunCommand } from "./commands/run.js";
+import { registerDbCommand } from "./commands/db.js";
+import { registerStopCommand } from "./commands/stop.js";
+import { registerSyncCommand } from "./commands/sync.js";
 
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json") as { version: string };
@@ -17,6 +20,9 @@ export function run(argv: string[]): void {
 
   registerCreateCommand(program);
   registerRunCommand(program);
+  registerDbCommand(program);
+  registerStopCommand(program);
+  registerSyncCommand(program);
 
   program.parseAsync(argv);
 }

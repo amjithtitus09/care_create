@@ -1,14 +1,12 @@
 import * as p from "@clack/prompts";
 import pc from "picocolors";
-import fs from "node:fs/promises";
 import path from "node:path";
 import { existsSync } from "node:fs";
 import { execa, type ResultPromise } from "execa";
 import type { Command } from "commander";
 
 import type { CreateManifest } from "../types.js";
-
-const COMPOSE_FILES = ["-f", "docker-compose.yaml", "-f", "docker-compose.local.yaml"];
+import { COMPOSE_FILES, readManifest } from "../lib/backend.js";
 
 const PREFIX_COLORS = [pc.cyan, pc.green, pc.magenta, pc.yellow, pc.blue, pc.red];
 
@@ -27,14 +25,6 @@ export function registerRunCommand(program: Command): void {
     .action((directory: string | undefined) => runCommand(directory));
 }
 
-async function readManifest(targetPath: string): Promise<CreateManifest> {
-  const file = path.join(targetPath, ".care-create.json");
-  if (!existsSync(file)) {
-    throw new Error(`No .care-create.json found in ${targetPath}. Run 'care create' first.`);
-  }
-  return JSON.parse(await fs.readFile(file, "utf8")) as CreateManifest;
-}
-
 async function ensureDeps(cwd: string): Promise<void> {
   if (!existsSync(path.join(cwd, "node_modules"))) {
     await execa("npm", ["install"], { cwd, stdio: "inherit" });
@@ -46,7 +36,6 @@ function parseCommand(command: string): [string, string[]] {
   return [parts[0], parts.slice(1)];
 }
 
-// Stream a child's output with a colored [name] prefix so concurrent servers stay readable.
 function spawnTask(task: Task, color: (text: string) => string): ResultPromise {
   const [command, args] = parseCommand(task.command);
   const child = execa(command, args, {

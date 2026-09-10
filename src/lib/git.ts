@@ -1,10 +1,10 @@
 import { execa } from "execa";
-import fs from "node:fs/promises";
 import { existsSync } from "node:fs";
+import path from "node:path";
 
-export async function cloneRepo(repo: string, branch: string, dest: string): Promise<void> {
-  if (existsSync(dest) && (await fs.readdir(dest)).length > 0) {
-    throw new Error(`Destination ${dest} already exists and is not empty`);
+export async function cloneRepo(repo: string, branch: string, dest: string): Promise<boolean> {
+  if (existsSync(dest) && existsSync(path.join(dest, ".git"))) {
+    return false;
   }
 
   const args = ["clone", "--depth", "1"];
@@ -14,4 +14,12 @@ export async function cloneRepo(repo: string, branch: string, dest: string): Pro
   args.push(repo, dest);
 
   await execa("git", args);
+  return true;
+}
+
+export async function pullRepo(dir: string): Promise<void> {
+  if (!existsSync(path.join(dir, ".git"))) {
+    throw new Error(`${dir} is not a git repository`);
+  }
+  await execa("git", ["pull", "--ff-only"], { cwd: dir });
 }

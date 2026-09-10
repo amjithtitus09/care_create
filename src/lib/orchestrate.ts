@@ -2,6 +2,7 @@ import { execa } from "execa";
 import pc from "picocolors";
 
 import type { PluginConfigEntry, Runtime } from "../types.js";
+import { nativeBuildEnv } from "./native.js";
 
 const COMPOSE_FILES = ["-f", "docker-compose.yaml", "-f", "docker-compose.local.yaml"];
 
@@ -21,6 +22,10 @@ interface OrchestrateOptions {
 
 function step(message: string): void {
   process.stdout.write(`\n${pc.cyan("▶")} ${pc.bold(message)}\n`);
+}
+
+function warn(message: string): void {
+  process.stdout.write(`\n${pc.yellow("!")} ${message}\n`);
 }
 
 function run(command: string, args: string[], cwd: string, env?: Record<string, string>) {
@@ -88,7 +93,10 @@ async function makeEditable(
       if (runtime === "docker") {
         await retry(() => backendExec(cwd, ["pip", "install", "-e", pkg]));
       } else {
-        await run("pipenv", ["run", "pip", "install", "-e", pkg], cwd, nativeEnv());
+        await run("pipenv", ["run", "pip", "install", "-e", pkg], cwd, {
+          ...nativeEnv(),
+          ...nativeBuildEnv().env,
+        });
       }
     } catch (error) {
       warnings.push(`Could not make plug editable (${pkg}): ${message(error)}`);
@@ -170,8 +178,16 @@ async function nativeUp(
   await run("pipenv", ["install", "--categories", "packages dev-packages docs"], cwd);
 
   if (additionalPlugs) {
+    const build = nativeBuildEnv();
+    if (build.warning) {
+      warn(build.warning);
+      warnings.push(build.warning);
+    }
     step("Installing backend plugs");
-    await run("pipenv", ["run", "python", "install_plugins.py"], cwd, nativeEnv(additionalPlugs));
+    await run("pipenv", ["run", "python", "install_plugins.py"], cwd, {
+      ...nativeEnv(additionalPlugs),
+      ...build.env,
+    });
   }
 
   await makeEditable("native", cwd, plugPackages, warnings);
