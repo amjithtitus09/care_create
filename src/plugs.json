@@ -39,7 +39,7 @@
       "repo": "https://github.com/10bedicu/care_abdm_fe.git",
       "branch": "develop",
       "dir": "care_abdm_fe",
-      "enabledApp": "care_abdm_fe",
+      "enabledApp": "10bedicu/care_abdm_fe",
       "devUrl": "localhost:5173",
       "devCommand": "npm run start",
       "remoteEntryUrl": "http://localhost:5173/assets/remoteEntry.js",

@@ -113,6 +113,10 @@ function backendPlugPackage(plug: BackendPlug, runtime: Runtime, backendPath: st
   return runtime === "docker" ? plug.packageName : path.join(backendPath, plug.dir);
 }
 
+function remoteEntryUrl(plug: FrontendPlug): string {
+  return plug.remoteEntryUrl ?? (plug.devUrl ? `http://${plug.devUrl}/assets/remoteEntry.js` : "");
+}
+
 async function createCommand(directory: string | undefined, options: CreateOptions): Promise<void> {
   p.intro(pc.bgCyan(pc.black(" @ohcn/care create ")));
 
@@ -269,7 +273,7 @@ async function createCommand(directory: string | undefined, options: CreateOptio
   const pluginConfigs: PluginConfigEntry[] = installedFrontend.map((plug) => ({
     slug: plug.name,
     meta: {
-      url: plug.remoteEntryUrl ?? (plug.devUrl ? `http://${plug.devUrl}/assets/remoteEntry.js` : ""),
+      url: remoteEntryUrl(plug),
       name: plug.name,
       config: plug.pluginConfig?.config ?? {},
     },
@@ -307,11 +311,17 @@ async function createCommand(directory: string | undefined, options: CreateOptio
     for (const plug of installedFrontend) {
       Object.assign(frontendEnv, frontendEnvByPlug.get(plug.name) ?? {});
     }
+    // care_fe reads each entry as `org/repo@host/path/to/remoteEntry.js` (scheme implied) and lets its URL override the
+    // registered plugin config's, so it must name the same remoteEntry.js.
     const enabledApps = installedFrontend
-      .map((plug) => (plug.devUrl ? `${plug.enabledApp}@${plug.devUrl}` : plug.enabledApp))
+      .map((plug) => {
+        const entry = remoteEntryUrl(plug).replace(/^https?:\/\//, "");
+        return entry ? `${plug.enabledApp}@${entry}` : plug.enabledApp;
+      })
       .join(",");
+    // Only the CLI's overrides go here; care_fe/.env supplies the defaults. Never seed from .example.env: its blank
+    // `KEY=` placeholders load as "" and fail care_fe's env validation (only a missing key counts as unset).
     const frontendEnvPath = path.join(frontendPath, ".env.local");
-    await copyIfMissing(path.join(frontendPath, ".example.env"), frontendEnvPath);
     await upsertEnv(frontendEnvPath, {
       REACT_CARE_API_URL: "http://127.0.0.1:9000",
       REACT_ENABLED_APPS: enabledApps,
