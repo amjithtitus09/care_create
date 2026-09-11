@@ -1,11 +1,20 @@
 import { execa, type ResultPromise } from "execa";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 
 import type { CreateManifest, Runtime } from "../types.js";
 
 export const COMPOSE_FILES = ["-f", "docker-compose.yaml", "-f", "docker-compose.local.yaml"];
+
+// Compose defaults the project name to the backend dir ("care"), so every care checkout would share one set of
+// volumes (care_postgres-data, ...). Derive a name unique to this setup instead.
+export function composeProjectName(targetPath: string): string {
+  const slug = path.basename(targetPath).toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^[-_]+|[-_]+$/g, "");
+  const hash = createHash("sha256").update(targetPath).digest("hex").slice(0, 8);
+  return `${slug || "care"}-${hash}`;
+}
 
 export async function readManifest(targetPath: string): Promise<CreateManifest> {
   const file = path.join(targetPath, ".care-create.json");
