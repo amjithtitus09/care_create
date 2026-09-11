@@ -23,7 +23,7 @@ export interface FrontendPlug {
   repo: string;
   branch: string;
   dir: string;
-  enabledApp: string;
+  enabledApp: string; // "org/repo" — care_fe rejects a bare repo name in REACT_ENABLED_APPS
   devUrl?: string;
   devCommand?: string;
   remoteEntryUrl?: string;
