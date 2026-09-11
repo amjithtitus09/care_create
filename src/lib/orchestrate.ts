@@ -104,7 +104,7 @@ async function makeEditable(
   }
   if (runtime === "docker") {
     try {
-      await run("docker", ["compose", "restart", "backend", "celery"], cwd);
+      await run("docker", ["compose", ...COMPOSE_FILES, "restart", "backend", "celery"], cwd);
     } catch (error) {
       warnings.push(`Could not restart services after editable install: ${message(error)}`);
     }

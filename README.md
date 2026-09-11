@@ -31,7 +31,7 @@ care create              # or: care create ./care-platform
 4. Prompts only for the environment variables each selected plug marks as `prompt`; everything else uses its `default`.
 5. Asks whether to populate the database with dummy data.
 6. Clones `care` and `care_fe` (plus the selected plug repos) at the branches defined in the registry.
-7. Configures backend plugs via `ADDITIONAL_PLUGS` (their env lands in each plug's `configs`), and writes `care_fe/.env.local`.
+7. Configures backend plugs via `ADDITIONAL_PLUGS` (their env lands in each plug's `configs`), and writes `care_fe/.env.local`. For Docker, it also pins a unique `COMPOSE_PROJECT_NAME` in `care/.env`, so the setup's containers and volumes never collide with another `care` checkout's (Compose would otherwise name them all `care`); manual `docker compose`/`make` commands run in `care/` pick it up too.
 8. Builds and starts the services, makes backend plugs editable, runs migrations, syncs permissions/valuesets, optionally loads fixtures, and registers frontend plugin configs.
 9. Writes a `.care-create.json` manifest so the other commands know the layout.
 

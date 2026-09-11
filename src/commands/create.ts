@@ -9,6 +9,7 @@ import registryJson from "../plugs.json" with { type: "json" };
 import type { BackendPlug, CreateManifest, FrontendPlug, PluginConfigEntry, Registry, Runtime } from "../types.js";
 import { cloneRepo, pullRepo } from "../lib/git.js";
 import { upsertEnv, copyIfMissing } from "../lib/env.js";
+import { composeProjectName, readEnvValue } from "../lib/backend.js";
 import { orchestrate } from "../lib/orchestrate.js";
 
 const registry = registryJson as unknown as Registry;
@@ -286,12 +287,20 @@ async function createCommand(directory: string | undefined, options: CreateOptio
       ...(additionalPlugs ? { ADDITIONAL_PLUGS: additionalPlugs } : {}),
     };
 
+    // care/.env holds Django settings for native and COMPOSE_PROJECT_NAME for docker; seeding it the same way for both
+    // keeps it complete if a setup switches runtime in place.
+    const backendEnvPath = path.join(backendPath, ".env");
+    await copyIfMissing(path.join(backendPath, ".env.example"), backendEnvPath);
+
     if (runtime === "docker") {
+      // Compose reads COMPOSE_PROJECT_NAME from care/.env, so the CLI and manual `docker compose`/`make` runs share it.
+      await upsertEnv(backendEnvPath, {
+        COMPOSE_PROJECT_NAME:
+          (await readEnvValue(backendEnvPath, "COMPOSE_PROJECT_NAME")) || composeProjectName(targetPath),
+      });
       await upsertEnv(path.join(backendPath, "docker", ".local.env"), backendValues);
     } else {
-      const nativeEnvPath = path.join(backendPath, ".env");
-      await copyIfMissing(path.join(backendPath, ".env.example"), nativeEnvPath);
-      await upsertEnv(nativeEnvPath, { ...nativeServices, ...backendValues });
+      await upsertEnv(backendEnvPath, { ...nativeServices, ...backendValues });
     }
 
     const frontendEnv: Record<string, string> = {};
