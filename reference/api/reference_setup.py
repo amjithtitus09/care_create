@@ -1,8 +1,10 @@
 import os
 
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.core.management import call_command
 
+from care.users.api.viewsets.plug_config import PlugConfigViewset
 from care.users.models import PlugConfig
 
 # care's demo data creates care-admin, so it is only loaded into a fresh database.
@@ -22,5 +24,7 @@ PlugConfig.objects.update_or_create(
         }
     },
 )
+# CARE caches its plug config list and clears it only on changes made through its API.
+cache.delete(PlugConfigViewset.cache_key)
 
 print(f"CARE is ready at {os.environ['REFERENCE_URL']}")  # noqa: T201
