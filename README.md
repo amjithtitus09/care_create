@@ -19,6 +19,8 @@ npx @ohcn/care create
 
 `[directory]` defaults to the current directory for every command except `create`. Each command (other than `create`) reads `.care-create.json` to know whether the setup is Docker or native and acts accordingly.
 
+To run CARE with the ABDM plug using only Docker, without this CLI, see [`reference/`](reference/README.md).
+
 ## `care create`
 
 ```bash

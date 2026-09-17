@@ -1,0 +1,175 @@
+# CARE with the care-abdm plug, built from the latest code on every `up --build`:
+# ghcr.io/ohcnetwork/care:latest (care develop), care_fe develop and care-abdm main.
+# Usage is in README.md next to this file.
+name: care-reference
+
+x-care-env: &care-env
+  DJANGO_SETTINGS_MODULE: config.settings.deployment
+  DJANGO_DEBUG: "False"
+  DJANGO_SECRET_KEY: care-reference
+  DJANGO_ADMIN_URL: admin
+  DJANGO_SECURE_HSTS_PRELOAD: "False"
+  DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS: "False"
+  DJANGO_SECURE_SSL_REDIRECT: "False"
+  DJANGO_SECURE_CONTENT_TYPE_NOSNIFF: "False"
+  # care's wait_for_db.sh reads the POSTGRES_* values; Django reads DATABASE_URL.
+  POSTGRES_USER: postgres
+  POSTGRES_PASSWORD: postgres
+  POSTGRES_HOST: db
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: care
+  DATABASE_URL: postgres://postgres:postgres@db:5432/care
+  REDIS_URL: redis://redis:6379/0
+  CELERY_BROKER_URL: redis://redis:6379/0
+  BUCKET_REGION: ap-south-1
+  BUCKET_KEY: minioadmin
+  BUCKET_SECRET: minioadmin
+  BUCKET_ENDPOINT: http://minio:9000
+  BUCKET_EXTERNAL_ENDPOINT: http://localhost:${REFERENCE_PORT:-4400}
+  FILE_UPLOAD_BUCKET: patient-bucket
+  FACILITY_S3_BUCKET: facility-bucket
+  SNS_ACCESS_KEY: unused
+  SNS_SECRET_KEY: unused
+  EMAIL_HOST: unused
+  EMAIL_USER: unused
+  EMAIL_PASSWORD: unused
+  ABDM_CLIENT_ID: ${ABDM_CLIENT_ID:?Set ABDM_CLIENT_ID to your ABDM sandbox client ID}
+  ABDM_CLIENT_SECRET: ${ABDM_CLIENT_SECRET:?Set ABDM_CLIENT_SECRET to your ABDM sandbox client secret}
+  ABDM_CALLBACK_BASE_URL: ${ABDM_CALLBACK_BASE_URL:-}
+
+# The api image is built once by the api service; the other backend services reuse it.
+x-backend: &backend
+  image: care-reference-api
+  pull_policy: never
+  restart: unless-stopped
+  environment: *care-env
+
+# care's own healthcheck, with room for a first run's migrations before failures count.
+x-slow-start: &slow-start
+  test: ["CMD", "./healthcheck.sh"]
+  interval: 10s
+  start_period: 20m
+  retries: 6
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: care
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 5s
+      retries: 30
+
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 30
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/ready"]
+      interval: 5s
+      retries: 30
+
+  buckets:
+    image: minio/mc:latest
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        mc alias set local http://minio:9000 minioadmin minioadmin &&
+        mc mb --ignore-existing local/patient-bucket local/facility-bucket &&
+        mc anonymous set public local/facility-bucket
+    depends_on:
+      minio:
+        condition: service_healthy
+
+  celery-beat:
+    <<: *backend
+    # Runs migrations and syncs permissions and valuesets before it reports healthy.
+    entrypoint: ["bash", "celery_beat.sh"]
+    healthcheck: *slow-start
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  celery-worker:
+    <<: *backend
+    entrypoint: ["bash", "reference-entrypoint.sh", "celery_worker.sh"]
+    depends_on: &after-migrations
+      celery-beat:
+        condition: service_healthy
+      tunnel:
+        condition: service_started
+        required: false
+
+  api:
+    <<: *backend
+    build:
+      context: ./api
+      pull: true
+    pull_policy: build
+    entrypoint: ["bash", "reference-entrypoint.sh", "start.sh"]
+    healthcheck: *slow-start
+    depends_on: *after-migrations
+
+  setup:
+    <<: *backend
+    restart: "no"
+    # The image's healthcheck is for long-running services; this one exits when done.
+    healthcheck:
+      disable: true
+    environment:
+      <<: *care-env
+      DJANGO_DEBUG: "True"
+      REFERENCE_URL: http://localhost:${REFERENCE_PORT:-4400}
+    entrypoint: ["bash", "reference-setup.sh"]
+    depends_on:
+      celery-beat:
+        condition: service_healthy
+      buckets:
+        condition: service_completed_successfully
+
+  web:
+    build:
+      context: ./web
+      pull: true
+      args:
+        CARE_API_URL: http://localhost:${REFERENCE_PORT:-4400}
+    restart: unless-stopped
+    ports:
+      - "${REFERENCE_PORT:-4400}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+      setup:
+        condition: service_completed_successfully
+
+  # Milestone M2: a public HTTPS tunnel for ABDM callbacks. It reaches only /api/abdm/ (see web/nginx.conf).
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    profiles: [m2]
+    restart: unless-stopped
+    command: tunnel --no-autoupdate --metrics 0.0.0.0:2000 --url http://web:8080
+
+volumes:
+  postgres-data:
+  minio-data:
