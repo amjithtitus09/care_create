@@ -1,5 +1,5 @@
-# care_fe from develop and the care-abdm frontend from main, served by nginx with CARE's API proxied.
-# ADD resolves each branch to its latest commit on every build, so new commits rebuild their stage.
+# care_fe from develop and the care-abdm frontend at CARE_ABDM_REF, served by nginx with CARE's API proxied.
+# ADD resolves a branch to its latest commit on every build, so new care_fe commits rebuild its stage.
 
 FROM node:22-bookworm-slim AS care-fe
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
@@ -12,7 +12,8 @@ ARG CARE_API_URL=http://localhost:4400
 RUN REACT_CARE_API_URL="${CARE_API_URL}" npm run build
 
 FROM node:22-bookworm-slim AS care-abdm-fe
-ADD https://github.com/ohcnetwork/care-abdm.git#main /src
+ARG CARE_ABDM_REF=main
+ADD https://github.com/ohcnetwork/care-abdm.git#${CARE_ABDM_REF} /src
 WORKDIR /src/frontend
 # Built under /abdm/ so its assets don't collide with care_fe's /assets/ on the same origin.
 RUN npm ci --ignore-scripts && npx tsc -b && npx vite build --base=/abdm/

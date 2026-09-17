@@ -1,5 +1,5 @@
-# CARE with the care-abdm plug, built from the latest code on every `up --build`:
-# ghcr.io/ohcnetwork/care:latest (care develop), care_fe develop and care-abdm main.
+# CARE with the care-abdm plug, built from source on every `up --build`: care and care_fe from
+# their latest develop, and care-abdm pinned to 2df14d7 (M1) until its migrations match care develop.
 # Usage is in README.md next to this file.
 name: care-reference
 
@@ -33,6 +33,8 @@ x-care-env: &care-env
   EMAIL_HOST: unused
   EMAIL_USER: unused
   EMAIL_PASSWORD: unused
+  # The plugs Django loads. The api build installs them from ADDITIONAL_PLUGS in its build args.
+  ADDITIONAL_PLUGS: '[{"name":"abdm","package_name":"abdm","version":""}]'
   ABDM_CLIENT_ID: ${ABDM_CLIENT_ID:?Set ABDM_CLIENT_ID to your ABDM sandbox client ID}
   ABDM_CLIENT_SECRET: ${ABDM_CLIENT_SECRET:?Set ABDM_CLIENT_SECRET to your ABDM sandbox client secret}
   ABDM_CALLBACK_BASE_URL: ${ABDM_CALLBACK_BASE_URL:-}
@@ -43,6 +45,9 @@ x-backend: &backend
   pull_policy: never
   restart: unless-stopped
   environment: *care-env
+  configs:
+    - source: reference-entrypoint
+      target: /app/reference-entrypoint.sh
 
 # care's own healthcheck, with room for a first run's migrations before failures count.
 x-slow-start: &slow-start
@@ -124,8 +129,13 @@ services:
   api:
     <<: *backend
     build:
-      context: ./api
+      # care's own production Dockerfile, run on the latest develop. It pip installs the plugs in
+      # ADDITIONAL_PLUGS: care-abdm at the commit whose migrations match care develop.
+      context: https://github.com/ohcnetwork/care.git#develop
+      dockerfile: docker/prod.Dockerfile
       pull: true
+      args:
+        ADDITIONAL_PLUGS: '[{"name":"abdm","package_name":"git+https://github.com/ohcnetwork/care-abdm.git@2df14d776818ce98ac82a4b70e68b1aff77b9980#subdirectory=backend","version":""}]'
     pull_policy: build
     entrypoint: ["bash", "reference-entrypoint.sh", "start.sh"]
     healthcheck: *slow-start
@@ -141,7 +151,14 @@ services:
       <<: *care-env
       DJANGO_DEBUG: "True"
       REFERENCE_URL: http://localhost:${REFERENCE_PORT:-4400}
-    entrypoint: ["bash", "reference-setup.sh"]
+    # care's demo data loader needs Faker, a dev dependency its production image leaves out.
+    entrypoint:
+      - bash
+      - -c
+      - ./wait_for_db.sh && pip install --quiet --no-cache-dir Faker && python manage.py shell < reference_setup.py
+    configs:
+      - source: reference-setup
+        target: /app/reference_setup.py
     depends_on:
       celery-beat:
         condition: service_healthy
@@ -154,6 +171,8 @@ services:
       pull: true
       args:
         CARE_API_URL: http://localhost:${REFERENCE_PORT:-4400}
+        # Keep in step with care-abdm's commit in the api build.
+        CARE_ABDM_REF: 2df14d776818ce98ac82a4b70e68b1aff77b9980
     restart: unless-stopped
     ports:
       - "${REFERENCE_PORT:-4400}:80"
@@ -169,6 +188,12 @@ services:
     profiles: [m2]
     restart: unless-stopped
     command: tunnel --no-autoupdate --metrics 0.0.0.0:2000 --url http://web:8080
+
+configs:
+  reference-entrypoint:
+    file: ./api/reference-entrypoint.sh
+  reference-setup:
+    file: ./api/reference_setup.py
 
 volumes:
   postgres-data:
