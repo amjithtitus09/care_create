@@ -46,9 +46,10 @@ x-backend: &backend
   pull_policy: never
   restart: unless-stopped
   environment: *care-env
-  configs:
-    - source: reference-entrypoint
-      target: /app/reference-entrypoint.sh
+  # Bind mounts, not configs: compose recreates a container when a mount's source path changes,
+  # and a run from GitHub fetches each commit of this repo to its own path.
+  volumes:
+    - ./api/reference-entrypoint.sh:/app/reference-entrypoint.sh:ro
 
 # care's own healthcheck, with room for a first run's migrations before failures count.
 x-slow-start: &slow-start
@@ -156,9 +157,8 @@ services:
       - bash
       - -c
       - ./wait_for_db.sh && pip install --quiet --no-cache-dir Faker && python manage.py shell < reference_setup.py
-    configs:
-      - source: reference-setup
-        target: /app/reference_setup.py
+    volumes:
+      - ./api/reference_setup.py:/app/reference_setup.py:ro
     depends_on:
       celery-beat:
         condition: service_healthy
@@ -188,12 +188,6 @@ services:
     profiles: [m2]
     restart: unless-stopped
     command: tunnel --no-autoupdate --metrics 0.0.0.0:2000 --url http://web:8080
-
-configs:
-  reference-entrypoint:
-    file: ./api/reference-entrypoint.sh
-  reference-setup:
-    file: ./api/reference_setup.py
 
 volumes:
   postgres-data:
