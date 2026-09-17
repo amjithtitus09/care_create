@@ -81,8 +81,10 @@ services:
       interval: 5s
       retries: 30
 
+  # MinIO's images are gone from Docker Hub. Silo is the MinIO fork that care's own compose
+  # file uses, and its image also carries mc for the buckets service.
   minio:
-    image: minio/minio:latest
+    image: pgsty/silo:latest
     restart: unless-stopped
     command: server /data
     environment:
@@ -96,7 +98,7 @@ services:
       retries: 30
 
   buckets:
-    image: minio/mc:latest
+    image: pgsty/silo:latest
     entrypoint: ["/bin/sh", "-c"]
     command:
       - >-
