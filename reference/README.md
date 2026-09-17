@@ -15,13 +15,13 @@ Needs Docker with Compose 2.37 or later (tested with Docker Desktop 28). Pass yo
 macOS and Linux:
 
 ```bash
-ABDM_CLIENT_ID=<client id> ABDM_CLIENT_SECRET=<client secret> docker compose -f https://github.com/amjithtitus09/care_create.git#reference:reference/compose.yaml up --build --wait
+ABDM_CLIENT_ID=<client id> ABDM_CLIENT_SECRET=<client secret> docker compose -f https://github.com/amjithtitus09/care_create.git#reference:reference/compose.yaml up --build --wait --yes
 ```
 
 Windows PowerShell:
 
 ```powershell
-$env:ABDM_CLIENT_ID="<client id>"; $env:ABDM_CLIENT_SECRET="<client secret>"; docker compose -f https://github.com/amjithtitus09/care_create.git#reference:reference/compose.yaml up --build --wait
+$env:ABDM_CLIENT_ID="<client id>"; $env:ABDM_CLIENT_SECRET="<client secret>"; docker compose -f https://github.com/amjithtitus09/care_create.git#reference:reference/compose.yaml up --build --wait --yes
 ```
 
 When the command returns, open http://localhost:4400 and sign in as `care-admin` with the password `Ohcn@123`. To list every demo user, run `docker compose -p care-reference logs setup`.
