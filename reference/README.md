@@ -14,19 +14,25 @@ care-abdm is pinned because its newer commits need CARE migrations that aren't o
 
 Needs Docker with Compose 2.37 or later (tested with Docker Desktop 28). Pass your ABDM sandbox client ID and secret.
 
-macOS and Linux:
+macOS:
 
 ```bash
-ABDM_CLIENT_ID=YOUR_CLIENT_ID ABDM_CLIENT_SECRET=YOUR_CLIENT_SECRET docker compose -f https://github.com/amjithtitus09/care_create.git#reference:reference/compose.yaml up --build --wait --yes
+ABDM_CLIENT_ID='YOUR_CLIENT_ID' ABDM_CLIENT_SECRET='YOUR_CLIENT_SECRET' docker compose -f https://github.com/amjithtitus09/care_create.git#reference:reference/compose.yaml up --build --wait --yes && open http://localhost:4400
+```
+
+Linux:
+
+```bash
+ABDM_CLIENT_ID='YOUR_CLIENT_ID' ABDM_CLIENT_SECRET='YOUR_CLIENT_SECRET' docker compose -f https://github.com/amjithtitus09/care_create.git#reference:reference/compose.yaml up --build --wait --yes && xdg-open http://localhost:4400
 ```
 
 Windows PowerShell:
 
 ```powershell
-$env:ABDM_CLIENT_ID="YOUR_CLIENT_ID"; $env:ABDM_CLIENT_SECRET="YOUR_CLIENT_SECRET"; docker compose -f https://github.com/amjithtitus09/care_create.git#reference:reference/compose.yaml up --build --wait --yes
+$env:ABDM_CLIENT_ID='YOUR_CLIENT_ID'; $env:ABDM_CLIENT_SECRET='YOUR_CLIENT_SECRET'; docker compose -f https://github.com/amjithtitus09/care_create.git#reference:reference/compose.yaml up --build --wait --yes; if ($LASTEXITCODE -eq 0) { Start-Process http://localhost:4400 }
 ```
 
-When the command returns, open http://localhost:4400 and sign in as `care-admin` with the password `Ohcn@123`. To list every demo user, run `docker compose -p care-reference logs setup`.
+`--wait` holds the command until CARE is ready, then http://localhost:4400 opens in your browser. Sign in as `care-admin` with the password `Ohcn@123`. To list every demo user, run `docker compose -p care-reference logs setup`.
 
 The first run downloads and builds everything from source, which takes about 10 minutes on an Apple Silicon Mac. Later runs rebuild only what changed.
 
@@ -38,7 +44,7 @@ To use your own public URL instead of the tunnel, set `ABDM_CALLBACK_BASE_URL` a
 
 ## Port
 
-The app runs on port 4400. To use another port, set `REFERENCE_PORT`, for example `REFERENCE_PORT=5000`.
+The app runs on port 4400. To use another port, set `REFERENCE_PORT`, for example `REFERENCE_PORT=5000`, and change the address at the end of the command to match.
 
 ## Stop
 
