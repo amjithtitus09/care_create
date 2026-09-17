@@ -32,7 +32,7 @@ Windows PowerShell:
 $env:ABDM_CLIENT_ID='YOUR_CLIENT_ID'; $env:ABDM_CLIENT_SECRET='YOUR_CLIENT_SECRET'; docker compose -f https://github.com/amjithtitus09/care_create.git#reference:reference/compose.yaml up --build --wait --yes; if ($LASTEXITCODE -eq 0) { Start-Process http://localhost:4400 }
 ```
 
-`--wait` holds the command until CARE is ready, then http://localhost:4400 opens in your browser. Sign in as `care-admin` with the password `Ohcn@123`. To list every demo user, run `docker compose -p care-reference logs setup`.
+`--wait` holds the command until CARE is ready, then http://localhost:4400 opens in your browser. Sign in as the superuser `admin` with the password `admin`. CARE's other demo users, such as `care-doctor` and `care-nurse`, have the password `Ohcn@123`.
 
 The first run downloads and builds everything from source, which takes about 10 minutes on an Apple Silicon Mac. Later runs rebuild only what changed.
 
