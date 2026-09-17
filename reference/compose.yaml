@@ -5,7 +5,8 @@ name: care-reference
 
 x-care-env: &care-env
   DJANGO_SETTINGS_MODULE: config.settings.deployment
-  DJANGO_DEBUG: "False"
+  # Debug is on so failed API calls return their tracebacks. care's demo data loader also needs it.
+  DJANGO_DEBUG: "True"
   DJANGO_SECRET_KEY: care-reference
   DJANGO_ADMIN_URL: admin
   DJANGO_SECURE_HSTS_PRELOAD: "False"
@@ -149,7 +150,6 @@ services:
       disable: true
     environment:
       <<: *care-env
-      DJANGO_DEBUG: "True"
       REFERENCE_URL: http://localhost:${REFERENCE_PORT:-4400}
     # care's demo data loader needs Faker, a dev dependency its production image leaves out.
     entrypoint:
